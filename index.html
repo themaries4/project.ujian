@@ -17,7 +17,6 @@
       --warn: #f59e0b;
       --danger: #ef4444;
 
-      /* Warna kabel UTP standar */
       --c-putih-oranye: linear-gradient(135deg, #f8fafc 45%, #f97316 45%);
       --c-oranye: #f97316;
       --c-putih-hijau: linear-gradient(135deg, #f8fafc 45%, #22c55e 45%);
@@ -146,6 +145,61 @@
       font-size: 0.92rem;
     }
 
+    /* Supabase Config Box */
+    .supabase-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1.1rem 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .supabase-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
+    }
+
+    .field input {
+      width: 100%;
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.75rem;
+      border-radius: 0.5rem;
+      font-size: 0.88rem;
+    }
+
+    .supabase-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.6rem;
+      margin-top: 0.85rem;
+    }
+
+    .sync-badge {
+      font-size: 0.82rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .sync-badge.connected {
+      border-color: var(--accent-2);
+      color: #86efac;
+      background: rgba(34, 197, 94, 0.1);
+    }
+
     /* Checklist */
     .progress-wrap {
       background: var(--surface);
@@ -270,7 +324,6 @@
     .status-ok { border-color: var(--accent-2); color: #86efac; }
     .status-warn { border-color: var(--warn); color: #fde68a; }
 
-    /* Topologi & Table */
     table {
       width: 100%;
       border-collapse: collapse;
@@ -330,6 +383,28 @@
     <section id="persiapan" class="active">
       <h2>Alat, Bahan &amp; Checklist Instalasi</h2>
       <p class="subtitle">Centang setiap tahap saat Anda menyiapkan instalasi jaringan LAN di rumah, kantor, atau lab.</p>
+
+      <div class="supabase-box">
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:0.5rem; align-items:center;">
+          <strong>Sinkronisasi Supabase (Opsional)</strong>
+          <span class="sync-badge" id="syncBadge">Mode Lokal (localStorage)</span>
+        </div>
+        <div class="supabase-grid">
+          <div class="field">
+            <label for="supabaseUrl">Supabase Project URL</label>
+            <input type="url" id="supabaseUrl" placeholder="https://xxxx.supabase.co" />
+          </div>
+          <div class="field">
+            <label for="supabaseAnonKey">Supabase Anon Key</label>
+            <input type="password" id="supabaseAnonKey" placeholder="eyJhbGciOiJIUzI1NiIs..." />
+          </div>
+        </div>
+        <div class="supabase-actions">
+          <button class="btn btn-primary" id="saveSupabaseBtn">Hubungkan &amp; Sinkronkan</button>
+          <button class="btn" id="clearSupabaseBtn">Reset Kredensial</button>
+          <span id="supabaseMsg" style="font-size:0.84rem; color:var(--muted);"></span>
+        </div>
+      </div>
 
       <div class="progress-wrap">
         <div style="display:flex; justify-content:space-between; font-size:0.9rem;">
@@ -513,40 +588,170 @@
       });
     });
 
-    // Render Checklist
+    // Konfigurasi Supabase + Checklist
+    const SUPABASE_CFG_KEY = "lan_supabase_cfg_v1";
+    const LOCAL_CHECKLIST_KEY = "lan_checklist_v1";
+    const TABLE_NAME = "lan_checklist_progress";
+
+    const supabaseUrlInput = document.getElementById("supabaseUrl");
+    const supabaseAnonKeyInput = document.getElementById("supabaseAnonKey");
+    const saveSupabaseBtn = document.getElementById("saveSupabaseBtn");
+    const clearSupabaseBtn = document.getElementById("clearSupabaseBtn");
+    const supabaseMsg = document.getElementById("supabaseMsg");
+    const syncBadge = document.getElementById("syncBadge");
+
     const checklistContainer = document.getElementById("checklistContainer");
     const progressBar = document.getElementById("progressBar");
     const progressText = document.getElementById("progressText");
-    const savedState = JSON.parse(localStorage.getItem("lan_checklist_v1") || "{}");
+
+    let sbConfig = JSON.parse(localStorage.getItem(SUPABASE_CFG_KEY) || "null");
+    let checklistState = JSON.parse(localStorage.getItem(LOCAL_CHECKLIST_KEY) || "{}");
+
+    if (sbConfig?.url && sbConfig?.anonKey) {
+      supabaseUrlInput.value = sbConfig.url;
+      supabaseAnonKeyInput.value = sbConfig.anonKey;
+    }
+
+    function hasSupabase() {
+      return Boolean(sbConfig?.url && sbConfig?.anonKey);
+    }
+
+    function setSyncStatus(connected, label) {
+      syncBadge.textContent = label;
+      syncBadge.classList.toggle("connected", connected);
+    }
+
+    function getSbHeaders() {
+      return {
+        "apikey": sbConfig.anonKey,
+        "Authorization": `Bearer ${sbConfig.anonKey}`,
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal"
+      };
+    }
+
+    async function fetchChecklistFromSupabase() {
+      if (!hasSupabase()) {
+        setSyncStatus(false, "Mode Lokal (localStorage)");
+        return;
+      }
+      const cleanUrl = sbConfig.url.replace(/\/+$/, "");
+      const endpoint = `${cleanUrl}/rest/v1/${TABLE_NAME}?select=id,done`;
+      const res = await fetch(endpoint, { headers: getSbHeaders() });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const rows = await res.json();
+      const merged = { ...checklistState };
+      rows.forEach(r => {
+        merged[r.id] = Boolean(r.done);
+      });
+      checklistState = merged;
+      localStorage.setItem(LOCAL_CHECKLIST_KEY, JSON.stringify(checklistState));
+      setSyncStatus(true, "Terhubung ke Supabase");
+    }
+
+    async function syncItemToSupabase(id, done) {
+      if (!hasSupabase()) return;
+      const cleanUrl = sbConfig.url.replace(/\/+$/, "");
+      const endpoint = `${cleanUrl}/rest/v1/${TABLE_NAME}`;
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: getSbHeaders(),
+        body: JSON.stringify([{ id, done, updated_at: new Date().toISOString() }])
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+    }
 
     function updateProgress() {
       const total = CHECKLIST_ITEMS.length;
-      const done = CHECKLIST_ITEMS.filter(item => savedState[item.id]).length;
+      const done = CHECKLIST_ITEMS.filter(item => checklistState[item.id]).length;
       const pct = Math.round((done / total) * 100);
       progressBar.style.width = pct + "%";
       progressText.textContent = `${pct}% (${done}/${total})`;
-      localStorage.setItem("lan_checklist_v1", JSON.stringify(savedState));
+      localStorage.setItem(LOCAL_CHECKLIST_KEY, JSON.stringify(checklistState));
     }
 
-    CHECKLIST_ITEMS.forEach(item => {
-      const label = document.createElement("label");
-      label.className = "checklist-item" + (savedState[item.id] ? " done" : "");
-      label.innerHTML = `
-        <input type="checkbox" ${savedState[item.id] ? "checked" : ""} />
-        <div>
-          <span class="title" style="font-weight:600; display:block;">${item.title}</span>
-          <small style="color:var(--muted);">${item.desc}</small>
-        </div>
-      `;
-      const cb = label.querySelector("input");
-      cb.addEventListener("change", () => {
-        savedState[item.id] = cb.checked;
-        label.classList.toggle("done", cb.checked);
-        updateProgress();
+    function renderChecklist() {
+      checklistContainer.innerHTML = "";
+      CHECKLIST_ITEMS.forEach(item => {
+        const isDone = Boolean(checklistState[item.id]);
+        const label = document.createElement("label");
+        label.className = "checklist-item" + (isDone ? " done" : "");
+        label.innerHTML = `
+          <input type="checkbox" ${isDone ? "checked" : ""} />
+          <div>
+            <span class="title" style="font-weight:600; display:block;">${item.title}</span>
+            <small style="color:var(--muted);">${item.desc}</small>
+          </div>
+        `;
+        const cb = label.querySelector("input");
+        cb.addEventListener("change", async () => {
+          checklistState[item.id] = cb.checked;
+          label.classList.toggle("done", cb.checked);
+          updateProgress();
+          if (hasSupabase()) {
+            try {
+              await syncItemToSupabase(item.id, cb.checked);
+              supabaseMsg.textContent = "Tersimpan ke Supabase.";
+              supabaseMsg.style.color = "#86efac";
+            } catch (err) {
+              supabaseMsg.textContent = `Gagal sinkron ke Supabase (${err.message}). Tersimpan di lokal.`;
+              supabaseMsg.style.color = "#fde68a";
+            }
+          }
+        });
+        checklistContainer.appendChild(label);
       });
-      checklistContainer.appendChild(label);
+      updateProgress();
+    }
+
+    saveSupabaseBtn.addEventListener("click", async () => {
+      const url = supabaseUrlInput.value.trim();
+      const anonKey = supabaseAnonKeyInput.value.trim();
+      if (!url || !anonKey) {
+        supabaseMsg.textContent = "Isi Supabase URL dan Anon Key terlebih dahulu.";
+        supabaseMsg.style.color = "#fde68a";
+        return;
+      }
+      sbConfig = { url, anonKey };
+      localStorage.setItem(SUPABASE_CFG_KEY, JSON.stringify(sbConfig));
+      supabaseMsg.textContent = "Menghubungkan ke Supabase...";
+      supabaseMsg.style.color = "var(--muted)";
+
+      try {
+        await fetchChecklistFromSupabase();
+        for (const item of CHECKLIST_ITEMS) {
+          await syncItemToSupabase(item.id, Boolean(checklistState[item.id]));
+        }
+        renderChecklist();
+        supabaseMsg.textContent = "Koneksi berhasil & checklist tersinkronisasi.";
+        supabaseMsg.style.color = "#86efac";
+      } catch (err) {
+        setSyncStatus(false, "Error Koneksi Supabase");
+        supabaseMsg.textContent = `Gagal terhubung (${err.message}). Periksa URL, Anon Key, dan tabel/RLS.`;
+        supabaseMsg.style.color = "#fca5a5";
+      }
     });
-    updateProgress();
+
+    clearSupabaseBtn.addEventListener("click", () => {
+      sbConfig = null;
+      localStorage.removeItem(SUPABASE_CFG_KEY);
+      supabaseUrlInput.value = "";
+      supabaseAnonKeyInput.value = "";
+      setSyncStatus(false, "Mode Lokal (localStorage)");
+      supabaseMsg.textContent = "Kredensial Supabase dihapus.";
+      supabaseMsg.style.color = "var(--muted)";
+    });
+
+    renderChecklist();
+    if (hasSupabase()) {
+      fetchChecklistFromSupabase()
+        .then(() => renderChecklist())
+        .catch(() => setSyncStatus(false, "Offline / Gagal Sinkron"));
+    }
 
     // Simulator RJ45
     const cableModeSelect = document.getElementById("cableMode");
