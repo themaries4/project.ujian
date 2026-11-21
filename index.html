@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Belajar TKJ</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="halaman-login">
+
+  <main class="kartu-login">
+    <h1>Belajar TKJ</h1>
+    <p class="subjudul">Masuk dengan nama dan kelasmu</p>
+
+    <form id="formLogin">
+      <label for="inputNama">Nama</label>
+      <input type="text" id="inputNama" placeholder="Contoh: Budi Santoso" required>
+
+      <label for="inputKelas">Kelas</label>
+      <input type="text" id="inputKelas" placeholder="Contoh: XI TKJ 1" required>
+
+      <button type="submit">Masuk</button>
+      <p id="pesanLogin" class="pesan"></p>
+    </form>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="script.js"></script>
+</body>
+</html>
