@@ -101,6 +101,107 @@ function formatWaktu(isoString) {
 }
 
 // ==========================
+// TAMPILAN MODUL
+// ==========================
+function esc(teks) {
+  return teks
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function kategoriSlug(kategori) {
+  return kategori.toLowerCase().replace(/\s+/g, '-');
+}
+
+// Kata pembuka yang akan diberi kotak warna
+const CALLOUT = [
+  { kata: 'Contoh', kelas: 'callout-contoh' },
+  { kata: 'Tips', kelas: 'callout-tips' },
+  { kata: 'Analogi', kelas: 'callout-tips' },
+  { kata: 'Perhatian', kelas: 'callout-bahaya' },
+  { kata: 'Catatan penting', kelas: 'callout-bahaya' },
+  { kata: 'Latihan', kelas: 'callout-latihan' },
+  { kata: 'Cara mengingat', kelas: 'callout-ingat' }
+];
+
+function kelasCallout(baris) {
+  const hit = CALLOUT.find(c => baris.startsWith(c.kata));
+  return hit ? hit.kelas : null;
+}
+
+// Menentukan jenis setiap baris teks
+function jenisBaris(baris) {
+  if (baris.trim() === '') return 'kosong';
+  if (/^\s*- /.test(baris)) return 'ul';
+  if (/^\d+\. /.test(baris)) return 'ol';
+  if (/^(\s{2,}|\t)/.test(baris)) return 'kode';
+  if (/^(def|if|elif|else:|for|while|return|print|break|continue)\b/.test(baris)) return 'kode';
+  if (/^[a-z_]+\s*(=|\+=)/.test(baris)) return 'kode';
+  if (kelasCallout(baris)) return 'callout';
+  return 'teks';
+}
+
+// Membuat "Label: isi" menjadi label yang dicetak tebal
+function formatItem(teks) {
+  const m = teks.match(/^([^:]{1,40}):\s(.*)$/);
+  if (m) return `<strong>${esc(m[1])}:</strong> ${esc(m[2])}`;
+  return esc(teks);
+}
+
+// Mengubah teks modul biasa menjadi HTML yang berwarna dan rapi
+function formatKonten(teks) {
+  const hasil = [];
+  let grup = null;
+
+  const tutup = () => {
+    const g = grup;
+    grup = null;
+    if (!g) return;
+
+    const isi = g.baris;
+
+    if (g.tipe === 'ul') {
+      hasil.push('<ul>' + isi.map(b => `<li>${formatItem(b.replace(/^\s*- /, ''))}</li>`).join('') + '</ul>');
+    } else if (g.tipe === 'ol') {
+      const awal = parseInt(isi[0], 10);
+      const akhir = parseInt(isi[isi.length - 1], 10);
+      const mundur = awal > akhir ? ' reversed' : '';
+      hasil.push(`<ol start="${awal}"${mundur}>` + isi.map(b => `<li>${formatItem(b.replace(/^\d+\. /, ''))}</li>`).join('') + '</ol>');
+    } else if (g.tipe === 'kode') {
+      hasil.push('<pre class="kode"><code>' + esc(isi.join('\n')) + '</code></pre>');
+    } else {
+      hasil.push('<p>' + esc(isi.join(' ')) + '</p>');
+    }
+  };
+
+  for (const baris of teks.split('\n')) {
+    const tipe = jenisBaris(baris);
+
+    if (tipe === 'kosong') {
+      tutup();
+      continue;
+    }
+
+    if (tipe === 'callout') {
+      tutup();
+      hasil.push(`<div class="callout ${kelasCallout(baris)}">${esc(baris)}</div>`);
+      continue;
+    }
+
+    if (!grup || grup.tipe !== tipe) {
+      tutup();
+      grup = { tipe, baris: [] };
+    }
+    grup.baris.push(baris);
+  }
+
+  tutup();
+  return hasil.join('');
+}
+
+// ==========================
 // HALAMAN LOGIN (index.html)
 // ==========================
 function initLogin() {
@@ -209,9 +310,12 @@ function bukaModul(id) {
     btn.classList.toggle('aktif', btn.dataset.id === id);
   });
 
-  document.getElementById('kategoriModul').textContent = modul.kategori;
+  const badge = document.getElementById('kategoriModul');
+  badge.textContent = modul.kategori;
+  badge.className = 'badge badge-' + kategoriSlug(modul.kategori);
+
   document.getElementById('judulModul').textContent = modul.judul;
-  document.getElementById('kontenModul').textContent = modul.konten;
+  document.getElementById('kontenModul').innerHTML = formatKonten(modul.konten);
 
   muatKomentar(id);
 }
