@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GAS BELAJAR NAK CANTIK/GANTENG</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body id="dashboardPage">
+
+  <header class="topbar">
+    <div>Halo, <strong id="namaUser"></strong> (<span id="kelasUser"></span>)</div>
+    <button id="btnLogout" class="btn-kecil">Keluar</button>
+  </header>
+
+  <div class="layout">
+    <!-- Daftar modul (diisi otomatis oleh script.js) -->
+    <aside class="sidebar" id="daftarModul"></aside>
+
+    <main class="konten">
+      <!-- Isi modul -->
+      <section class="kartu">
+        <span id="kategoriModul" class="badge"></span>
+        <h2 id="judulModul"></h2>
+        <div id="kontenModul" class="isi-modul"></div>
+      </section>
+
+      <!-- Diskusi / komentar -->
+      <section class="kartu">
+        <h3>Diskusi</h3>
+        <div id="listKomentar" class="list-komentar"></div>
+
+        <form id="formKomentar" class="form-komentar">
+          <textarea id="isiKomentar" rows="2" placeholder="Tulis komentar..." required></textarea>
+          <button type="submit">Kirim</button>
+        </form>
+      </section>
+
+      <!-- Kotak saran -->
+      <section class="kartu">
+        <h3>Kotak Saran</h3>
+        <form id="formSaran">
+          <textarea id="isiSaran" rows="3" placeholder="Saran atau masukan untuk web ini..." required></textarea>
+          <button type="submit">Kirim Saran</button>
+          <p id="pesanSaran" class="pesan"></p>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="script.js"></script>
+</body>
+</html>
